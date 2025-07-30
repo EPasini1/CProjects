@@ -3,75 +3,100 @@
 using Microsoft.EntityFrameworkCore;
 using ProductStockAPI.Data;
 using ProductStockAPI.Models;
-using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations; // Still needed for models, but not for DTO validation check here
+using ProductStockAPI.DTOs; // Import your DTOs
+using Microsoft.AspNetCore.Http; // For StatusCodes
 
 namespace ProductStockAPI.Endpoints;
 
 public static class ProductEndpoints
 {
-    // Add this helper method inside the ProductEndpoints class
-    private static IResult? ValidateProduct(Product product)
-    {
-        var validationResults = new List<ValidationResult>();
-        var validationContext = new ValidationContext(product);
+    // O método ValidateProduct() não é mais necessário aqui para validação de entrada,
+    // pois as Minimal APIs validam automaticamente os DTOs nos parâmetros.
+    // Deixá-lo como estava seria para validação manual de um Product model,
+    // mas o ideal é que a validação esteja nos DTOs de entrada.
+    // Se você mantiver o método, ele não será mais chamado aqui.
+    // Se quiser reutilizar a lógica de validação de 'Product', pode manter o método, mas a chamada será diferente.
+    // Para simplificar, vou remover a chamada explícita de ValidateProduct nos endpoints.
 
-        if (!Validator.TryValidateObject(product, validationContext, validationResults, validateAllProperties: true))
-        {
-            var errors = validationResults.ToDictionary(
-                v => v.MemberNames.FirstOrDefault() ?? "General",
-                v => new string[] { v.ErrorMessage ?? "Unknown validation error." }
-            );
-            return Results.ValidationProblem(errors);
-        }
-        return null; // Indicates validation passed
-    }
     public static void MapProductEndpoints(this IEndpointRouteBuilder app)
     {
         var productsApi = app.MapGroup("/api/products");
 
         // GET /api/products - List all products
+        // Return a list of ProductResponse DTOs
         productsApi.MapGet("/", async (ApplicationDbContext db) =>
-            await db.Products.ToListAsync());
+            await db.Products.Select(p => ProductResponse.FromProduct(p)).ToListAsync());
 
         // GET /api/products/{id} - Get a specific product
+        // Return a ProductResponse DTO
         productsApi.MapGet("/{id}", async (int id, ApplicationDbContext db) =>
         {
             var product = await db.Products.FindAsync(id);
             if (product == null)
             {
-                return Results.NotFound(new { message = $"Product with ID '{id}' was not found." });
+                // Corrected to use Problem Details format for 404
+                return Results.NotFound(new
+                {
+                    type = "https://yourapi.com/errors/not-found",
+                    title = "Product Not Found",
+                    status = StatusCodes.Status404NotFound,
+                    detail = $"Product with ID '{id}' was not found.",
+                    instance = $"/api/products/{id}"
+                });
             }
-            return Results.Ok(product);
+            return Results.Ok(ProductResponse.FromProduct(product)); // Return ProductResponse
         });
 
         // POST /api/products - Create a new product (REQUIRES AUTHORIZATION)
-        productsApi.MapPost("/", async (Product product, ApplicationDbContext db) =>
+        // Use CreateProductRequest as the input parameter
+        productsApi.MapPost("/", async (CreateProductRequest request, ApplicationDbContext db) =>
         {
-            var validationResult = ValidateProduct(product);
-            if (validationResult != null) return validationResult; // Return validation errors if any
+            // Minimal APIs automatically handle validation on 'request' based on DTO attributes.
+            // If validation fails, it will return Results.ValidationProblem(errors) automatically.
+            // No need for explicit 'ValidateProduct' call here for DTOs.
+
+            var product = new Product
+            {
+                Name = request.Name,
+                Description = request.Description,
+                Price = request.Price,
+                Stock = request.Stock,
+                CreatedDate = DateTime.UtcNow // Server-generated
+            };
 
             db.Products.Add(product);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/products/{product.Id}", product);
+            return Results.Created($"/api/products/{product.Id}", ProductResponse.FromProduct(product)); // Return ProductResponse
         }).RequireAuthorization();
 
         // PUT /api/products/{id} - Update an existing product (REQUIRES AUTHORIZATION)
-        productsApi.MapPut("/{id}", async (int id, Product updatedProduct, ApplicationDbContext db) =>
+        // Use UpdateProductRequest as the input parameter
+        productsApi.MapPut("/{id}", async (int id, UpdateProductRequest request, ApplicationDbContext db) =>
         {
-            var validationResult = ValidateProduct(updatedProduct);
-            if (validationResult != null) return validationResult; // Return validation errors if any
+            // Minimal APIs automatically handle validation on 'request' based on DTO attributes.
+            // If validation fails, it will return Results.ValidationProblem(errors) automatically.
+            // No need for explicit 'ValidateProduct' call here for DTOs.
 
             var existingProduct = await db.Products.FindAsync(id);
             if (existingProduct == null)
             {
-                return Results.NotFound(new { message = $"Product with ID '{id}' was not found." });
+                // Corrected to use Problem Details format for 404
+                return Results.NotFound(new
+                {
+                    type = "https://yourapi.com/errors/not-found",
+                    title = "Product Not Found",
+                    status = StatusCodes.Status404NotFound,
+                    detail = $"Product with ID '{id}' was not found.",
+                    instance = $"/api/products/{id}"
+                });
             }
 
-            existingProduct.Name = updatedProduct.Name;
-            existingProduct.Description = updatedProduct.Description;
-            existingProduct.Price = updatedProduct.Price;
-            existingProduct.Stock = updatedProduct.Stock;
-            existingProduct.LastUpdatedDate = DateTime.UtcNow;
+            existingProduct.Name = request.Name;
+            existingProduct.Description = request.Description;
+            existingProduct.Price = request.Price;
+            existingProduct.Stock = request.Stock;
+            existingProduct.LastUpdatedDate = DateTime.UtcNow; // Server-generated/updated
 
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -83,7 +108,15 @@ public static class ProductEndpoints
             var product = await db.Products.FindAsync(id);
             if (product == null)
             {
-                return Results.NotFound(new { message = $"Product with ID '{id}' was not found." });
+                // Corrected to use Problem Details format for 404
+                return Results.NotFound(new
+                {
+                    type = "https://yourapi.com/errors/not-found",
+                    title = "Product Not Found",
+                    status = StatusCodes.Status404NotFound,
+                    detail = $"Product with ID '{id}' could not be deleted because it was not found.",
+                    instance = $"/api/products/{id}"
+                });
             }
 
             db.Products.Remove(product);
