@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package xperim;
+
+// Definição do serviço StudyService
+service StudyService {
+  // Gera um pacote FHIR com base nos detalhes do paciente
+  rpc GenerateFhirBundle(GenerateFhirBundleRequest) returns (GenerateFhirBundleResponse);
+}
+
+// Mensagem de requisição para gerar um pacote FHIR
+message GenerateFhirBundleRequest {
+  string first_name = 1; // Primeiro nome do paciente
+  string last_name = 2;  // Sobrenome do paciente
+  string dob = 3;        // Data de nascimento do paciente no formato YYYY-MM-DD
+}
+
+// Mensagem de resposta contendo o pacote FHIR gerado em formato JSON
+message GenerateFhirBundleResponse {
+  string bundle_json = 1; // Pacote FHIR em formato JSON
+}
